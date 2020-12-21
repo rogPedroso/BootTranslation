@@ -2,6 +2,7 @@
 
 const React = require('react'); // <1>
 const ReactDOM = require('react-dom'); // <2>
+const when = require('when');
 const client = require('./client'); // <3>
 
 const follow = require('./follow'); // function to hop multiple links by "rel"
@@ -16,6 +17,8 @@ class App extends React.Component { // <1>
 		this.state = {translations: [], attributes: [], pageSize: 2, links: {}};
 		this.updatePageSize = this.updatePageSize.bind(this);
 		this.onCreate = this.onCreate.bind(this);
+		this.onUpdate = this.onUpdate.bind(this);
+		this.onTeste = this.onTeste.bind(this);
 		this.onDelete = this.onDelete.bind(this);
 		this.onNavigate = this.onNavigate.bind(this);
 	}
@@ -30,30 +33,41 @@ class App extends React.Component { // <1>
 				headers: {'Accept': 'application/schema+json'}
 			}).then(schema => {
 				this.schema = schema.entity;
+				this.links = translationCollection.entity._links;
 				return translationCollection;
 			});
-		}).done(translationCollection => {
+		}).then(translationCollection => { // <3>
+			return translationCollection.entity._embedded.translations.map(translation =>
+					client({
+						method: 'GET',
+						path: translation._links.self.href
+					})
+			);
+		}).then(translationPromises => { // <4>
+			return when.all(translationPromises);
+		}).done(translations => {
 			this.setState({
-				translations: translationCollection.entity._embedded.translations,
+				translations: translations,
 				attributes: Object.keys(this.schema.properties),
 				pageSize: pageSize,
-				links: translationCollection.entity._links});
+				links: this.links});
 		});
 	}
 	// end::follow-2[]
 
 	// tag::create[]
 	onCreate(newTranslation) {
-		follow(client, root, ['translations']).then(translationCollection => {
+		const self = this;
+		follow(client, root, ['translations']).then(response => {
 			return client({
 				method: 'POST',
-				path: translationCollection.entity._links.self.href,
+				path: response.entity._links.self.href,
 				entity: newTranslation,
 				headers: {'Content-Type': 'application/json'}
 			})
 		}).then(response => {
 			return follow(client, root, [
-				{rel: 'translations', params: {'size': this.state.pageSize}}]);
+				{rel: 'translations', params: {'size': self.state.pageSize}}]);
 		}).done(response => {
 			if (typeof response.entity._links.last !== "undefined") {
 				this.onNavigate(response.entity._links.last.href);
@@ -64,9 +78,50 @@ class App extends React.Component { // <1>
 	}
 	// end::create[]
 
+	onUpdate(translation, updatedTranslation) {
+		client({
+			method: 'PUT',
+			path: translation.entity._links.self.href,
+			entity: updatedTranslation,
+			headers: {
+				'Content-Type': 'application/json' //,
+				//'If-Match': translation.headers.Etag
+			}
+		}).done(response => {
+			this.loadFromServer(this.state.pageSize);
+		}, response => {
+			if (response.status.code === 412) {
+				alert('DENIED: Unable to update ' +
+				translation.entity._links.self.href + '. Your copy is stale.');
+			}
+		});
+	}
+	// end::update[]
+
+	onTeste(translation, updatedTranslation) {
+		console.log("Teste");
+		client({
+			method: 'PUT',
+			path: translation.entity._links.self.href,
+			entity: updatedTranslation,
+			headers: {
+				'Content-Type': 'application/json' //,
+				//'If-Match': translation.headers.Etag
+			}
+		}).done(response => {
+			//this.loadFromServer(this.state.pageSize);
+		}, response => {
+			if (response.status.code === 412) {
+				alert('DENIED: Unable to update ' +
+				translation.entity._links.self.href + '. Your copy is stale.');
+			}
+		});
+	}
+	// end::update[]
+
 	// tag::delete[]
 	onDelete(translation) {
-		client({method: 'DELETE', path: translation._links.self.href}).done(response => {
+		client({method: 'DELETE', path: translation.entity._links.self.href}).done(response => {
 			this.loadFromServer(this.state.pageSize);
 		});
 	}
@@ -74,12 +129,26 @@ class App extends React.Component { // <1>
 
 	// tag::navigate[]
 	onNavigate(navUri) {
-		client({method: 'GET', path: navUri}).done(translationCollection => {
+		client({
+			method: 'GET', 
+			path: navUri
+		}).then(translationCollection => {
+			this.links = translationCollection.entity._links;
+
+			return translationCollection.entity._embedded.translations.map(translation =>
+					client({
+						method: 'GET',
+						path: translation._links.self.href
+					})
+			);
+		}).then(translationPromises => {
+			return when.all(translationPromises);
+		}).done(translations => {
 			this.setState({
-				translations: translationCollection.entity._embedded.translations,
-				attributes: this.state.attributes,
+				translations: translations,
+				attributes: Object.keys(this.schema.properties),
 				pageSize: this.state.pageSize,
-				links: translationCollection.entity._links
+				links: this.links
 			});
 		});
 	}
@@ -102,125 +171,21 @@ class App extends React.Component { // <1>
 	render() {
 		return (
 			<div>
-				<CreateDialog attributes={this.state.attributes} onCreate={this.onCreate}/>  <CreateTeste attributes={this.state.attributes} onTeste={this.onTeste}/>
+				<CreateDialog attributes={this.state.attributes} onCreate={this.onCreate}/>
+				<TesteDialog attributes={this.state.attributes} onTeste={this.onTeste}/>
 				<TranslationList translations={this.state.translations}
 							  links={this.state.links}
 							  pageSize={this.state.pageSize}
+							  attributes={this.state.attributes}
 							  onNavigate={this.onNavigate}
+							  onUpdate={this.onUpdate}
 							  onDelete={this.onDelete}
 							  updatePageSize={this.updatePageSize}/>
 			</div>
 		)
 	}
-
-
-/*
-
-	componentDidMount() { // <2>
-		client({method: 'GET', path: '/api/translations'}).done(response => {
-			this.setState({translations: response.entity._embedded.translations});
-		});
-	}
-
-	render() { // <3>
-		return (
-			<TranslationList translations={this.state.translations}/>
-		)
-	}
-*/
 }
 // end::app[]
-
-class CreateTeste extends React.Component {
-
-	constructor(props) {
-		super(props);
-		this.handleSubmit = this.handleSubmit.bind(this);
-	}
-
-	handleSubmit(e) {
-		e.preventDefault();
-		const newTranslation = {};
-		this.props.attributes.forEach(attribute => {
-			if (attribute == 'respondido' || attribute == 'acerto') {
-				newTranslation[attribute] = 'false';
-			}
-			else {
-				newTranslation[attribute] = ReactDOM.findDOMNode(this.refs[attribute]).value.trim();
-			}
-		});
-		this.props.onCreate(newTranslation);
-
-		// clear out the dialog's inputs
-		this.props.attributes.forEach(attribute => {
-			if (attribute != 'respondido' && attribute != 'acerto') {
-				ReactDOM.findDOMNode(this.refs[attribute]).value = '';
-			}
-		});
-
-		// Navigate away from the dialog to hide it.
-		//window.location = "#";
-	}
-
-	render() {
-
-		var attribs = [
-            {
-                cod: 'exppt',
-                descricao: 'Expressão PT'
-            },
-            {
-                cod: 'expen',
-                descricao: 'Expressão EN'
-            },
-            {
-                cod: 'frasept',
-                descricao: 'Frase PT'
-            },
-            {
-                cod: 'fraseen',
-                descricao: 'Frase EN'
-            }
-          ];
-
-		
-		const inputs = attribs.map(campo =>
-			<p key={campo.cod}>
-				<input type="text" placeholder={campo.descricao} ref={campo.cod} className="field"/>
-			</p>
-		);
-		
-
-		/*
-		const inputs = this.props.attributes.map(attribute =>
-			<p key={attribute}>
-				<input type="text" placeholder={'Digite ' + attribute} ref={attribute} className="field"/>
-			</p>
-		);
-		*/
-
-		return (
-			<div>
-				<a href="#createTeste"><button>Teste</button></a>
-
-				<div id="createTeste" className="modalDialog">
-					<div>
-						<a href="#" title="Close" className="close">X</a>
-
-						<h2>Cadastro de nova tradução</h2>
-
-						<form>
-							{inputs}
-							<button onClick={this.handleSubmit}>Create</button>
-						</form>
-					</div>
-				</div>
-			</div>
-		)
-	}
-
-}
-
 
 
 class CreateDialog extends React.Component {
@@ -313,6 +278,142 @@ class CreateDialog extends React.Component {
 
 }
 
+class UpdateDialog extends React.Component {
+
+	constructor(props) {
+		super(props);
+		this.handleSubmit = this.handleSubmit.bind(this);
+	}
+
+	ajustaAtributos(atributos) {
+		return ["exppt", "expen", "frasept", "fraseen","respondido", "acerto"];
+	}
+
+	handleSubmit(e) {
+		e.preventDefault();
+		const updatedTranslation = {};
+		this.props.attributes.forEach(attribute => {
+			updatedTranslation[attribute] = ReactDOM.findDOMNode(this.refs[attribute]).value.trim();
+			//console.log(attribute + ' **** ' + updatedTranslation[attribute]);
+		});
+		this.props.onUpdate(this.props.translation, updatedTranslation);
+		window.location = "#";
+	}
+
+	render() {
+		//const inputs = this.props.attributes.map(attribute =>
+		const inputs = this.ajustaAtributos(this.props.attributes).map(attribute =>
+			<p key={this.props.translation.entity[attribute]}>
+				<input type="text" placeholder={attribute}
+					   defaultValue={this.props.translation.entity[attribute]}
+					   ref={attribute} className="field"/>
+			</p>
+		);
+
+		const dialogId = "updateTranslation-" + this.props.translation.entity._links.self.href;
+
+		return (
+			<div key={this.props.translation.entity._links.self.href}>
+				<a href={"#" + dialogId}><button>Update</button></a>
+				<div id={dialogId} className="modalDialog">
+					<div>
+						<a href="#" title="Close" className="close">X</a>
+
+						<h2>Update an translation</h2>
+
+						<form>
+							{inputs}
+							<button onClick={this.handleSubmit}>Update</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		)
+	}
+
+};
+
+class TesteDialog extends React.Component {
+
+	constructor(props) {
+		super(props);
+		this.handleSubmit = this.handleSubmit.bind(this);
+	}
+
+	handleSubmit(e) {
+		e.preventDefault();
+		const testeTranslation = {};
+		this.props.attributes.forEach(attribute => {
+			if (attribute == 'respondido' || attribute == 'acerto') {
+				testeTranslation[attribute] = 'false';
+			}
+			else {
+				testeTranslation[attribute] = ReactDOM.findDOMNode(this.refs[attribute]).value.trim();
+			}
+		});
+		this.props.onTeste(testeTranslation);
+
+		// clear out the dialog's inputs
+		this.props.attributes.forEach(attribute => {
+			if (attribute != 'respondido' && attribute != 'acerto') {
+				ReactDOM.findDOMNode(this.refs[attribute]).value = '';
+			}
+		});
+
+		// Navigate away from the dialog to hide it.
+		//window.location = "#";
+	}
+
+	render() {
+
+		var attribs = [
+            {
+                cod: 'exppt',
+                descricao: 'Expressão PT'
+            },
+            {
+                cod: 'expen',
+                descricao: 'Expressão EN'
+            },
+            {
+                cod: 'frasept',
+                descricao: 'Frase PT'
+            },
+            {
+                cod: 'fraseen',
+                descricao: 'Frase EN'
+            }
+          ];
+
+		
+		const inputs = attribs.map(campo =>
+			<p key={campo.cod}>
+				<input type="text" placeholder={campo.descricao} ref={campo.cod} className="field"/>
+			</p>
+		);
+
+		return (
+			<div>
+				<a href="#testeTranslation"><button>Teste</button></a>
+
+				<div id="testeTranslation" className="modalDialog">
+					<div>
+						<a href="#" title="Close" className="close">X</a>
+
+						<h2>Teste de tradução</h2>
+
+						<form>
+							{inputs}
+							<button onClick={this.handleSubmit}>Teste</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		)
+	}
+
+}
+
 
 // tag::translation-list[]
 class TranslationList extends React.Component{
@@ -363,7 +464,11 @@ class TranslationList extends React.Component{
 
 	render() {
 		const translations = this.props.translations.map(translation =>
-			<Translation key={translation._links.self.href} translation={translation} onDelete={this.props.onDelete}/>
+			<Translation key={translation.entity._links.self.href} 
+						 translation={translation} 
+						 attributes={this.props.attributes}
+						 onUpdate={this.props.onUpdate}
+						 onDelete={this.props.onDelete}/>
 		);
 
 		const navLinks = [];
@@ -394,6 +499,7 @@ class TranslationList extends React.Component{
 							<th>Respondido</th>
 							<th>Acerto</th>
 							<th></th>
+							<th></th>
 						</tr>
 						{translations}
 					</tbody>
@@ -421,13 +527,18 @@ class Translation extends React.Component{
 
 	render() {
 		return (
-			<tr key={this.props.translation.id}>
-				<td>{this.props.translation.exppt}</td>
-				<td>{this.props.translation.expen}</td>
-				<td>{this.props.translation.frasept}</td>
-				<td>{this.props.translation.fraseen}</td>
-                <td>{this.props.translation.respondido.toString()}</td>
-                <td>{this.props.translation.acerto.toString()}</td>
+			<tr key={this.props.translation.entity.id}>
+				<td>{this.props.translation.entity.exppt}</td>
+				<td>{this.props.translation.entity.expen}</td>
+				<td>{this.props.translation.entity.frasept}</td>
+				<td>{this.props.translation.entity.fraseen}</td>
+                <td>{this.props.translation.entity.respondido.toString()}</td>
+                <td>{this.props.translation.entity.acerto.toString()}</td>
+				<td>
+					<UpdateDialog translation={this.props.translation}
+								  attributes={this.props.attributes}
+								  onUpdate={this.props.onUpdate}/>
+				</td>
 				<td>
 					<button onClick={this.handleDelete}>Delete</button>
 				</td>
