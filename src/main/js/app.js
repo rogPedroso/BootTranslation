@@ -14,7 +14,7 @@ class App extends React.Component { // <1>
 
 	constructor(props) {
 		super(props);
-		this.state = {translations: [], attributes: [], pageSize: 2, links: {}};
+		this.state = {translations: [], attributes: [], pageSize: 12, links: {}};
 		this.updatePageSize = this.updatePageSize.bind(this);
 		this.onCreate = this.onCreate.bind(this);
 		this.onUpdate = this.onUpdate.bind(this);
@@ -338,60 +338,99 @@ class TesteDialog extends React.Component {
 	constructor(props) {
 		super(props);
 		this.handleSubmit = this.handleSubmit.bind(this);
-	}
+		this.mostrarTraducao = this.mostrarTraducao.bind(this);
+		this.state = {
+			hits: [],
+			isLoading: true,
+			tipo: 'hidden'
+		  };
+		}
 
-	handleSubmit(e) {
+	handleSubmit(e, acerto) {
+		var attribs = ["id", "exppt", "expen", "frasept", "fraseen"];
 		e.preventDefault();
 		const testeTranslation = {};
-		this.props.attributes.forEach(attribute => {
-			if (attribute == 'respondido' || attribute == 'acerto') {
-				testeTranslation[attribute] = 'false';
-			}
-			else {
-				testeTranslation[attribute] = ReactDOM.findDOMNode(this.refs[attribute]).value.trim();
-			}
+		attribs.forEach(attribute => {
+			testeTranslation[attribute] = ReactDOM.findDOMNode(this.refs[attribute]).value.trim();
 		});
-		this.props.onTeste(testeTranslation);
-
-		// clear out the dialog's inputs
-		this.props.attributes.forEach(attribute => {
-			if (attribute != 'respondido' && attribute != 'acerto') {
-				ReactDOM.findDOMNode(this.refs[attribute]).value = '';
-			}
-		});
-
-		// Navigate away from the dialog to hide it.
-		//window.location = "#";
+		testeTranslation["respondido"] = true;
+		testeTranslation["acerto"] = acerto;
+		fetch('http://192.168.0.11:8080/translation/teste/' + testeTranslation["id"], {
+				method: 'PUT',
+				body: JSON.stringify(testeTranslation),
+				headers: {"Content-type": "application/json; charset=UTF-8"}
+			})
+			.then(response => response.json())
+			.then(data => { console.log(data) });
 	}
 
+	componentDidMount() {
+		this.setState({ tipo: 'hidden'});
+		this.setState({ isLoading: true });
+		fetch('http://192.168.0.11:8080/translation/umnaorespondido')
+		  .then(response => response.json())
+		  .then(data => this.setState({ hits: data, isLoading: false }));
+	  }
+
+	  mostrarTraducao(e) {
+		console.log(this.props.attributes);
+		this.setState({ tipo: 'text'});
+	  }
+
+
 	render() {
+		const { hits, isLoading } = this.state;
+ 
+		if (isLoading) {
+		  return <p>Loading ...</p>;
+		}
+		else {
 
-		var attribs = [
-            {
-                cod: 'exppt',
-                descricao: 'Expressão PT'
-            },
-            {
-                cod: 'expen',
-                descricao: 'Expressão EN'
-            },
-            {
-                cod: 'frasept',
-                descricao: 'Frase PT'
-            },
-            {
-                cod: 'fraseen',
-                descricao: 'Frase EN'
-            }
-          ];
+		var attribs = this.state.hits;
+		return (
+			<div>
+				<a href="#testeTranslation"><button>Teste</button></a>
 
-		
+				<div id="testeTranslation" className="modalDialog">
+					<div>
+						<a href="#" title="Close" className="close">X</a>
+
+						<h2>Teste de tradução</h2>
+
+						<form>
+							<p key="id">
+								<input type="hidden" ref="id" value={attribs.id} className="field"/>
+							</p>
+							<p key="exppt">
+								<input type="hidden" ref="exppt" value={attribs.exppt} className="field"/>
+							</p>
+							<p key="expen">
+								<input type="hidden" ref="expen" value={attribs.expen} className="field"/>
+							</p>
+							<p key="frasept">
+								<input type="text" ref="frasept" value={attribs.frasept} className="field"/>
+							</p>
+							<p key="fraseendig">
+								<input type="text" ref="fraseendig" value="" className="field"/>
+							</p>
+							<p key="fraseen">
+								<input type={this.state.tipo} ref="fraseen" value={attribs.fraseen} className="field" />
+							</p>
+							<button onClick={this.mostrarTraducao}>Tradução</button><button onClick={e => this.handleSubmit(e, true)}>Acerto</button><button onClick={e => this.handleSubmit(e, false)}>Erro</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		)
+		}
+							/*<button onClick={this.mostrarTraducao}>Tradução</button><button onClick={this.handleSubmit}>Teste</button> -->*/
+
+/*		
 		const inputs = attribs.map(campo =>
 			<p key={campo.cod}>
 				<input type="text" placeholder={campo.descricao} ref={campo.cod} className="field"/>
 			</p>
 		);
-
 		return (
 			<div>
 				<a href="#testeTranslation"><button>Teste</button></a>
@@ -410,7 +449,9 @@ class TesteDialog extends React.Component {
 				</div>
 			</div>
 		)
-	}
+		}
+*/
+}
 
 }
 

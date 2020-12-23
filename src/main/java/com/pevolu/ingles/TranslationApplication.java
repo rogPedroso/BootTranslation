@@ -8,7 +8,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import java.util.List;
+import java.util.Collections;
+import java.util.Optional;
 
 @SpringBootApplication
 @RestController
@@ -28,38 +34,46 @@ public class TranslationApplication {
         return repository.findAll();
     }
 
+	@RequestMapping(value="/umnaorespondido",method = RequestMethod.GET)
+    public Translation umNaoRespondido() {
+		List<Translation> listTransl = repository.findByRespondido(false);
+		Collections.shuffle(listTransl);
+		Translation transl = listTransl.get(1);
+        return transl;
+    }
 
+	@RequestMapping(value="/respondido",method = RequestMethod.GET)
+    public List<Translation> respondido() {
+        return repository.findByRespondido(true);
+    }
 
-	/*
-	@Override
-	public void run(String... args) throws Exception {
+	@RequestMapping(value="/busca/{exppt}",method = RequestMethod.GET)
+    public Translation buscaExppt( @PathVariable("exppt") String exppt) {
+		Translation transl = repository.findByExppt(exppt);
+        return transl;
+    }
 
-		repository.deleteAll();
+	@RequestMapping(value="/buscaId/{id}",method = RequestMethod.GET)
+    public Optional buscaId( @PathVariable("id") String id) {
+        return repository.findById(id);
+    }
 
-		// save a couple of customers
-		repository.save(new Customer("Alice", "Smith"));
-		repository.save(new Customer("Bob", "Smith"));
-
-		// fetch all customers
-		System.out.println("Customers found with findAll():");
-		System.out.println("-------------------------------");
-		for (Customer customer : repository.findAll()) {
-			System.out.println(customer);
-		}
-		System.out.println();
-
-		// fetch an individual customer
-		System.out.println("Customer found with findByFirstName('Alice'):");
-		System.out.println("--------------------------------");
-		System.out.println(repository.findByFirstName("Alice"));
-
-		System.out.println("Customers found with findByLastName('Smith'):");
-		System.out.println("--------------------------------");
-		for (Customer customer : repository.findByLastName("Smith")) {
-			System.out.println(customer);
-		}
-
-	}*/
-
+	@PutMapping("/teste/{id}")
+	Translation replaceTranslation(@RequestBody Translation newTranslation, @PathVariable String id) {
+  	  return repository.findById(id)
+		.map(translation -> {
+			translation.exppt = newTranslation.exppt;
+			translation.expen = newTranslation.expen;
+			translation.frasept = newTranslation.frasept;
+			translation.fraseen = newTranslation.fraseen;
+			translation.respondido = newTranslation.respondido;
+			translation.acerto = newTranslation.acerto;
+		  return repository.save(translation);
+		})
+		.orElseGet(() -> {
+		  newTranslation.id = id;
+		  return repository.save(newTranslation);
+		});
+	}
 
 }
