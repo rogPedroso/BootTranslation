@@ -99,7 +99,6 @@ class App extends React.Component { // <1>
 	// end::update[]
 
 	onTeste(translation, updatedTranslation) {
-		console.log("Teste");
 		client({
 			method: 'PUT',
 			path: translation.entity._links.self.href,
@@ -248,14 +247,6 @@ class CreateDialog extends React.Component {
 		);
 		
 
-		/*
-		const inputs = this.props.attributes.map(attribute =>
-			<p key={attribute}>
-				<input type="text" placeholder={'Digite ' + attribute} ref={attribute} className="field"/>
-			</p>
-		);
-		*/
-
 		return (
 			<div>
 				<a href="#createTranslation"><button>Create</button></a>
@@ -294,7 +285,6 @@ class UpdateDialog extends React.Component {
 		const updatedTranslation = {};
 		this.props.attributes.forEach(attribute => {
 			updatedTranslation[attribute] = ReactDOM.findDOMNode(this.refs[attribute]).value.trim();
-			//console.log(attribute + ' **** ' + updatedTranslation[attribute]);
 		});
 		this.props.onUpdate(this.props.translation, updatedTranslation);
 		window.location = "#";
@@ -346,6 +336,7 @@ class TesteDialog extends React.Component {
 		  };
 		}
 
+
 	handleSubmit(e, acerto) {
 		var attribs = ["id", "exppt", "expen", "frasept", "fraseen"];
 		e.preventDefault();
@@ -360,8 +351,17 @@ class TesteDialog extends React.Component {
 				body: JSON.stringify(testeTranslation),
 				headers: {"Content-type": "application/json; charset=UTF-8"}
 			})
-			.then(response => response.json())
-			.then(data => { console.log(data) });
+			.then((response) => {
+				if(!response.ok) throw new Error(response.status);
+				else {
+					this.componentDidMount();
+					//this.render();
+				}
+			  })
+			  .catch((error) => {
+				alert('error: ' + error);
+			  });
+			  window.location = "#";	
 	}
 
 	componentDidMount() {
@@ -373,7 +373,6 @@ class TesteDialog extends React.Component {
 	  }
 
 	  mostrarTraducao(e) {
-		console.log(this.props.attributes);
 		this.setState({ tipo: 'text'});
 	  }
 
@@ -423,35 +422,8 @@ class TesteDialog extends React.Component {
 			</div>
 		)
 		}
-							/*<button onClick={this.mostrarTraducao}>Tradução</button><button onClick={this.handleSubmit}>Teste</button> -->*/
 
-/*		
-		const inputs = attribs.map(campo =>
-			<p key={campo.cod}>
-				<input type="text" placeholder={campo.descricao} ref={campo.cod} className="field"/>
-			</p>
-		);
-		return (
-			<div>
-				<a href="#testeTranslation"><button>Teste</button></a>
-
-				<div id="testeTranslation" className="modalDialog">
-					<div>
-						<a href="#" title="Close" className="close">X</a>
-
-						<h2>Teste de tradução</h2>
-
-						<form>
-							{inputs}
-							<button onClick={this.handleSubmit}>Teste</button>
-						</form>
-					</div>
-				</div>
-			</div>
-		)
-		}
-*/
-}
+	}
 
 }
 

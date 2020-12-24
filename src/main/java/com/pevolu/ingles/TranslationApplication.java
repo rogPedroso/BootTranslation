@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 
@@ -24,6 +26,9 @@ public class TranslationApplication {
 	@Autowired
 	private TranslationRepository repository;
 
+	@Autowired
+	private TesteRepository testeRepository;
+
 	public static void main(String[] args) {
 		SpringApplication.run(TranslationApplication.class, args);
 	}
@@ -34,13 +39,51 @@ public class TranslationApplication {
         return repository.findAll();
     }
 
+	@RequestMapping(value="/contatestes",method = RequestMethod.GET)
+    public Teste contaTestes() {
+		Teste teste;
+		List<Teste> listTeste = testeRepository.findAll();
+		if (listTeste.size() > 0) {
+			teste = testeRepository.findFirstByOrderByExecucaoDesc();
+		} else {
+			teste = new Teste (1, 0, 0, 0);
+			testeRepository.save(teste);
+		}
+        return teste;
+    }
+
+	
 	@RequestMapping(value="/umnaorespondido",method = RequestMethod.GET)
     public Translation umNaoRespondido() {
+		Translation transl;
 		List<Translation> listTransl = repository.findByRespondido(false);
-		Collections.shuffle(listTransl);
-		Translation transl = listTransl.get(1);
+		if (listTransl.size() > 0) {
+			Collections.shuffle(listTransl);
+			transl = listTransl.get(1);
+		} else {
+			ArrayList<Translation> arrayTransl = new ArrayList(repository.findAll());
+			arrayTransl.forEach(t -> resetResp(t));
+			repository.saveAll(arrayTransl);
+			Collections.shuffle(arrayTransl);
+			transl = arrayTransl.get(1);
+			Teste ultimoTeste = contaTestes();
+			Teste novoTeste = new Teste(ultimoTeste.execucao + 1, 0, 0, 0);
+			testeRepository.save(novoTeste);
+		}
         return transl;
     }
+	/*
+	@RequestMapping(value="/umnaorespondido",method = RequestMethod.GET)
+    public Translation umNaoRespondido() {
+        return repository.findByExppt("Livro");
+    }
+	*/
+
+	private static void resetResp(Translation transl) {
+		transl.respondido = false;
+		transl.acerto = false;
+    }
+
 
 	@RequestMapping(value="/respondido",method = RequestMethod.GET)
     public List<Translation> respondido() {
@@ -60,7 +103,7 @@ public class TranslationApplication {
 
 	@PutMapping("/teste/{id}")
 	Translation replaceTranslation(@RequestBody Translation newTranslation, @PathVariable String id) {
-  	  return repository.findById(id)
+		return repository.findById(id)
 		.map(translation -> {
 			translation.exppt = newTranslation.exppt;
 			translation.expen = newTranslation.expen;
@@ -68,11 +111,19 @@ public class TranslationApplication {
 			translation.fraseen = newTranslation.fraseen;
 			translation.respondido = newTranslation.respondido;
 			translation.acerto = newTranslation.acerto;
-		  return repository.save(translation);
+			Teste ultimoTeste = contaTestes();
+			ultimoTeste.respostas = ultimoTeste.respostas + 1;
+			if (newTranslation.acerto) {
+				ultimoTeste.acertos = ultimoTeste.acertos + 1;
+			} else {
+				ultimoTeste.erros = ultimoTeste.erros + 1;
+			}
+			testeRepository.save(ultimoTeste);
+			return repository.save(translation);
 		})
 		.orElseGet(() -> {
-		  newTranslation.id = id;
-		  return repository.save(newTranslation);
+			newTranslation.id = id;
+			return repository.save(newTranslation);
 		});
 	}
 
